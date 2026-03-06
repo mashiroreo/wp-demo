@@ -1,4 +1,8 @@
 # Logs
+.DS_Store
+*.zip
+wp-template/
+
 logs
 *.log
 npm-debug.log*
