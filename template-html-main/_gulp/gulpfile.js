@@ -1,24 +1,13 @@
 const { src, dest, watch, series, parallel } = require("gulp"); // Gulpの基本関数をインポート
 const sass = require("gulp-sass")(require("sass")); // SCSSをCSSにコンパイルするためのモジュール
-const plumber = require("gulp-plumber"); // エラーが発生してもタスクを続行するためのモジュール
-const notify = require("gulp-notify"); // エラーやタスク完了の通知を表示するためのモジュール
 const sassGlob = require("gulp-sass-glob-use-forward"); // SCSSのインポートを簡略化するためのモジュール
 const mmq = require("gulp-merge-media-queries"); // メディアクエリをマージするためのモジュール
 const postcss = require("gulp-postcss"); // CSSの変換処理を行うためのモジュール
 const autoprefixer = require("autoprefixer"); // ベンダープレフィックスを自動的に追加するためのモジュール
 const cssdeclsort = require("css-declaration-sorter"); // CSSの宣言をソートするためのモジュール
 const postcssPresetEnv = require("postcss-preset-env"); // 最新のCSS構文を使用可能にするためのモジュール
-const sourcemaps = require("gulp-sourcemaps"); // ソースマップを作成するためのモジュール
 const babel = require("gulp-babel"); // ES6+のJavaScriptをES5に変換するためのモジュール
-const imageminSvgo = require("imagemin-svgo"); // SVGを最適化するためのモジュール
 const browserSync = require("browser-sync"); // ブラウザの自動リロード機能を提供するためのモジュール
-const imagemin = require("gulp-imagemin"); // 画像を最適化するためのモジュール
-const imageminMozjpeg = require("imagemin-mozjpeg"); // JPEGを最適化するためのモジュール
-const imageminPngquant = require("imagemin-pngquant"); // PNGを最適化するためのモジュール
-const changed = require("gulp-changed"); // 変更されたファイルのみを対象にするためのモジュール
-const del = require("del"); // ファイルやディレクトリを削除するためのモジュール
-const webp = require('gulp-webp');//webp変換
-const rename = require('gulp-rename');//ファイル名変更
 
 // 読み込み先
 const srcPath = {
@@ -47,15 +36,7 @@ const htmlCopy = () => {
 const cssSass = () => {
   // ソースファイルを指定
   return (
-    src(srcPath.css)
-      // ソースマップを初期化
-      .pipe(sourcemaps.init())
-      // エラーハンドリングを設定
-      .pipe(
-        plumber({
-          errorHandler: notify.onError("Error:<%= error.message %>"),
-        })
-      )
+    src(srcPath.css, { sourcemaps: true })
       // Sassのパーシャル（_ファイル）を自動的にインポート
       .pipe(sassGlob())
       // SassをCSSにコンパイル
@@ -84,69 +65,22 @@ const cssSass = () => {
       )
       // メディアクエリを統合
       .pipe(mmq())
-      // ソースマップを書き出し
-      .pipe(sourcemaps.write("./"))
       // コンパイル済みのCSSファイルを出力先に保存
-      .pipe(dest(destPath.css))
-      // Sassコンパイルが完了したことを通知
-      .pipe(
-        notify({
-          message: "Sassをコンパイルしました！",
-          onLast: true,
-        })
-      )
+      .pipe(dest(destPath.css, { sourcemaps: "." }))
   );
 };
 
 // 画像圧縮
-const imgImagemin = () => {
-  // 画像ファイルを指定
-  return (
-    src(srcPath.img)
-      // 変更があった画像のみ処理対象に
-      .pipe(changed(destPath.img))
-      // 画像を圧縮
-      .pipe(
-        imagemin(
-          [
-            // JPEG画像の圧縮設定
-            imageminMozjpeg({
-              quality: 80, // 圧縮品質（0〜100）
-            }),
-            // PNG画像の圧縮設定
-            imageminPngquant(),
-            // SVG画像の圧縮設定
-            imageminSvgo({
-              plugins: [
-                {
-                  removeViewbox: false, // viewBox属性を削除しない
-                },
-              ],
-            }),
-          ],
-          {
-            verbose: true, // 圧縮情報を表示
-          }
-        )
-      )
-      .pipe(dest(destPath.img))
-      .pipe(webp())//webpに変換
-      // 圧縮済みの画像ファイルを出力先に保存
-      .pipe(dest(destPath.img))
-  );
+const imgImagemin = async () => {
+  const { optimizeImages } = await import("./scripts/optimize-images.mjs");
+  await optimizeImages("../src/images", destPath.img);
 };
 
 // js圧縮
 const jsBabel = () => {
   // JavaScriptファイルを指定
   return (
-    src(srcPath.js)
-      // エラーハンドリングを設定
-      .pipe(
-        plumber({
-          errorHandler: notify.onError("Error: <%= error.message %>"),
-        })
-      )
+    src(srcPath.js, { encoding: false })
       // Babelでトランスパイル（ES6からES5へ変換）
       .pipe(
         babel({
@@ -161,6 +95,10 @@ const jsBabel = () => {
 // ブラウザーシンク
 const browserSyncOption = {
   notify: false,
+  listen: "127.0.0.1",
+  open: false,
+  ui: false,
+  online: false,
   server: "../dist/",
 };
 const browserSyncFunc = () => {
@@ -173,7 +111,7 @@ const browserSyncReload = (done) => {
 
 // ファイルの削除
 const clean = () => {
-  return del(destPath.all, { force: true });
+  return require("node:fs/promises").rm(require("node:path").resolve(__dirname, "../dist"), { recursive: true, force: true });
 };
 // ファイルの監視
 const watchFiles = () => {
